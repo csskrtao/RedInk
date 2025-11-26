@@ -48,8 +48,10 @@ class GenAIClient:
                 "解决方案：在系统设置页面编辑该服务商，填写 API Key"
             )
 
+        # 使用 Google Gemini 公共 API（支持 API Key）
+        # 注意：Vertex AI 不支持通过 API Key 鉴权，如果需要走 Vertex，
+        # 必须使用服务账号 / OAuth 凭证，而不是这里的 api_key。
         self.client = genai.Client(
-            vertexai=True,
             api_key=self.api_key,
         )
 
@@ -156,7 +158,6 @@ class GenAIClient:
             safety_settings=self.default_safety_settings,
             image_config=types.ImageConfig(
                 aspect_ratio=aspect_ratio,
-                output_mime_type="image/png",
             ),
         )
 

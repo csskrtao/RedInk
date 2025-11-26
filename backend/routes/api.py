@@ -57,10 +57,13 @@ def generate_outline():
             return jsonify(result), 500
 
     except Exception as e:
+        import traceback
         error_msg = str(e)
+        full_traceback = traceback.format_exc()
+        print(f"Error in /api/outline: {error_msg}\n{full_traceback}")
         return jsonify({
             "success": False,
-            "error": f"大纲生成异常。\n错误详情: {error_msg}\n建议：检查后端日志获取更多信息"
+            "error": f"大纲生成异常。\n错误详情: {error_msg}\n建议：检查后端日志获取更多信息\n完整堆栈信息：\n{full_traceback}"
         }), 500
 
 

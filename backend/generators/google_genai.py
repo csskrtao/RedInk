@@ -63,8 +63,9 @@ class GoogleGenAIGenerator(ImageGeneratorBase):
             )
 
         # 初始化客户端
+        # 这里使用 Google Gemini 公共 API（generativelanguage.googleapis.com），支持 API Key。
+        # 如果想使用 Vertex AI，需要改为使用服务账号凭证并移除 api_key + vertexai=True 的组合。
         self.client = genai.Client(
-            vertexai=True,
             api_key=self.api_key,
         )
 
@@ -149,7 +150,6 @@ class GoogleGenAIGenerator(ImageGeneratorBase):
             safety_settings=self.safety_settings,
             image_config=types.ImageConfig(
                 aspect_ratio=aspect_ratio,
-                output_mime_type="image/png",
             ),
         )
 

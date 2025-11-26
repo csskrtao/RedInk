@@ -100,7 +100,7 @@ class OpenAICompatibleGenerator(ImageGeneratorBase):
         if self.endpoint_type == 'images':
             return self._generate_via_images_api(prompt, size, model, quality)
         elif self.endpoint_type == 'chat':
-            return self._generate_via_chat_api(prompt, size, model)
+            return self._generate_via_chat_api_image(prompt, size, model)
         else:
             raise ValueError(
                 f"不支持的端点类型: {self.endpoint_type}\n"
@@ -263,6 +263,89 @@ class OpenAICompatibleGenerator(ImageGeneratorBase):
             "建议：\n"
             "1. 尝试将 endpoint_type 改为 'images'\n"
             "2. 或联系API服务提供商确认正确的调用方式"
+        )
+
+    def _generate_via_chat_api_image(
+        self,
+        prompt: str,
+        size: str,
+        model: str
+    ) -> bytes:
+        """
+        通过 /v1/chat/completions 端点生成图片：
+        - 发送标准 Chat Completions 请求
+        - 从返回的 message.content 中提取图片 URL 或 base64
+        """
+        url = f"{self.base_url.rstrip('/')}/v1/chat/completions"
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 1.0,
+            "stream": False
+        }
+
+        response = requests.post(url, headers=headers, json=payload, timeout=180)
+
+        if response.status_code != 200:
+            error_detail = response.text[:500]
+            raise Exception(
+                f"OpenAI Chat API 请求失败 (状态码: {response.status_code})\n"
+                f"错误详情: {error_detail}\n"
+                f"请求地址: {url}\n"
+                f"模型: {model}\n"
+                "可能原因：\n"
+                "1. API密钥无效或已过期\n"
+                "2. 该服务商不支持通过 chat 端点生成图片\n"
+                "3. 请求参数格式错误\n"
+                "4. API配额已用尽\n"
+                "建议：检查 endpoint_type 或联系API服务提供商"
+            )
+
+        result = response.json()
+
+        # 兼容两类常见返回格式：
+        # 1）message.content 是 data:image;base64,... 形式
+        # 2）message.content 文本中包含图片 URL（如 http(s)://...png/jpg/jpeg/webp）
+        if "choices" in result and len(result["choices"]) > 0:
+            choice = result["choices"][0]
+            if "message" in choice and "content" in choice["message"]:
+                content = choice["message"]["content"]
+
+                if isinstance(content, str):
+                    # 先尝试从文本中提取图片 URL
+                    import re
+                    match = re.search(r"(https?://[^\s)]+\\.(?:png|jpg|jpeg|webp))", content)
+                    if match:
+                        image_url = match.group(1)
+                        img_response = requests.get(image_url, timeout=180)
+                        if img_response.status_code == 200:
+                            return img_response.content
+                        raise Exception(f"下载图片失败: {img_response.status_code} ({image_url})")
+
+                    # 再尝试 data:image;base64,xxx 格式
+                    if content.startswith("data:image"):
+                        base64_data = content.split(",", 1)[1]
+                        return base64.b64decode(base64_data)
+
+        raise ValueError(
+            "无法从 Chat API 响应中提取图片数据。\n"
+            f"响应内容: {str(result)[:500]}\n"
+            "可能原因：\n"
+            "1. 该服务商未返回图片URL或base64数据\n"
+            "2. 模型不支持通过 chat 端点生成图片\n"
+            "3. 请求格式与服务商要求不匹配\n"
+            "建议：检查服务商文档确认 chat 端点图片返回格式"
         )
 
     def get_supported_sizes(self) -> list:

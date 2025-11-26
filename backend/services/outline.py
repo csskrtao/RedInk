@@ -9,18 +9,29 @@ from backend.utils.text_client import get_text_chat_client
 
 class OutlineService:
     def __init__(self):
-        self.text_config = self._load_text_config()
-        self.client = self._get_client()
-        self.prompt_template = self._load_prompt_template()
+        print("OutlineService: Initializing...")
+        try:
+            self.text_config = self._load_text_config()
+            print(f"OutlineService: Loaded text config. Active provider: {self.text_config.get('active_provider')}")
+            self.client = self._get_client()
+            print("OutlineService: Got text chat client.")
+            self.prompt_template = self._load_prompt_template()
+            print("OutlineService: Loaded prompt template.")
+        except Exception as e:
+            print(f"OutlineService: Error during initialization: {e}")
+            raise # Re-raise to be caught by the outer try-except in api.py
 
     def _load_text_config(self) -> dict:
         """加载文本生成配置"""
+        print("OutlineService: Loading text config...")
         config_path = Path(__file__).parent.parent.parent / 'text_providers.yaml'
         if config_path.exists():
             with open(config_path, 'r', encoding='utf-8') as f:
-                return yaml.safe_load(f) or {}
+                config = yaml.safe_load(f) or {}
+                print(f"OutlineService: text_providers.yaml loaded. Config: {config}")
+                return config
         # 默认配置
-        return {
+        default_config = {
             'active_provider': 'google_gemini',
             'providers': {
                 'google_gemini': {
@@ -31,22 +42,30 @@ class OutlineService:
                 }
             }
         }
+        print(f"OutlineService: text_providers.yaml not found, using default config: {default_config}")
+        return default_config
 
     def _get_client(self):
         """根据配置获取客户端"""
+        print("OutlineService: Getting text chat client...")
         active_provider = self.text_config.get('active_provider', 'google_gemini')
         providers = self.text_config.get('providers', {})
         provider_config = providers.get(active_provider, {})
-        return get_text_chat_client(provider_config)
+        client = get_text_chat_client(provider_config)
+        print(f"OutlineService: Client obtained for provider: {active_provider}")
+        return client
 
     def _load_prompt_template(self) -> str:
+        print("OutlineService: Loading prompt template...")
         prompt_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "prompts",
             "outline_prompt.txt"
         )
         with open(prompt_path, "r", encoding="utf-8") as f:
-            return f.read()
+            template = f.read()
+            print(f"OutlineService: Prompt template loaded from {prompt_path}")
+            return template
 
     def _parse_outline(self, outline_text: str) -> List[Dict[str, Any]]:
         # 按 <page> 分割页面（兼容旧的 --- 分隔符）
@@ -88,6 +107,7 @@ class OutlineService:
         images: Optional[List[bytes]] = None
     ) -> Dict[str, Any]:
         try:
+            # print(f"OutlineService.generate_outline called with topic: {topic}, images count: {len(images) if images else 0}") # Removed for more targeted logging
             prompt = self.prompt_template.format(topic=topic)
 
             if images and len(images) > 0:
@@ -109,6 +129,7 @@ class OutlineService:
                 max_output_tokens=max_output_tokens,
                 images=images
             )
+            # print(f"generate_text returned: {outline_text[:200]}...") # Removed for more targeted logging
 
             pages = self._parse_outline(outline_text)
 
@@ -121,10 +142,8 @@ class OutlineService:
 
         except Exception as e:
             error_msg = str(e)
-            return {
-                "success": False,
-                "error": f"大纲生成失败。\n错误详情: {error_msg}\n可能原因：\n1. Text API配置错误或密钥无效\n2. 网络连接问题\n3. 模型无法访问或不存在\n4. 提示词格式有问题\n建议：检查配置文件 text_providers.yaml 和环境变量"
-            }
+            # print(f"Error in OutlineService.generate_outline: {error_msg}") # Removed for more targeted logging
+            raise e # Re-raise to be caught by the outer try-except in api.py for better error visibility
 
 
 def get_outline_service() -> OutlineService:
